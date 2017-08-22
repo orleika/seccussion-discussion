@@ -11,9 +11,14 @@
   "license": "ISC",
   "dependencies": {
     "cheerio-httpcli": "^0.7.0",
+    "child-process-promise": "^2.2.1",
     "ect": "^0.5.9",
     "express": "^4.15.4",
+    "install": "^0.10.1",
     "microsoft-speech-browser-sdk": "0.0.4",
+    "moment": "^2.18.1",
+    "npm": "^5.3.0",
+    "striptags": "^3.0.1",
     "ws": "^3.1.0"
   }
 }
