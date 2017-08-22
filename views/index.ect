@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Web Speech API WebSocket Sender</title>
+  <script>
+    (function() {
+      var ws = new WebSocket('ws://localhost:<%- @LISTEN_PORT %>');
+      var SpeechRecognition = SpeechRecognition || webkitSpeechRecognition
+      var SpeechGrammarList = SpeechGrammarList || webkitSpeechGrammarList
+      var SpeechRecognitionEvent = SpeechRecognitionEvent || webkitSpeechRecognitionEvent
+      var recognition = new SpeechRecognition();
+      recognition.lang = 'ja-JP';
+      recognition.interimResults = false;
+      recognition.continuous = true;
+      recognition.maxAlternatives = 1;
+      recognition.onerror = function(err) {
+        console.error(err);
+      }
+      recognition.onaudioend = function() {
+        recognition.stop();
+        setTimeout(function() {
+          recognition.start();
+        }, 1000);
+      }
+      recognition.onresult = function(event) {
+        console.log(event)
+        for (var i = event.resultIndex; i < event.results.length; ++i) {
+          var result = event.results[event.resultIndex][0].transcript;
+          document.getElementById('result').innerHTML = result;
+          ws.send(result);
+        }
+      }
+      recognition.onerror = function(event) {
+        console.error(event.error);
+      }
+      recognition.start();
+    })();
+  </script>
+</head>
+
+<body>
+  <div id="result"></div>
+</body>
+
+</html>
