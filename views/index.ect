@@ -6,7 +6,7 @@
   <title>Web Speech API WebSocket Sender</title>
   <script>
     (function() {
-      var ws = new WebSocket('ws://localhost:<%- @LISTEN_PORT %>');
+      var ws = new WebSocket('wss://localhost:<%- @LISTEN_PORT %>');
       var SpeechRecognition = SpeechRecognition || webkitSpeechRecognition
       var SpeechGrammarList = SpeechGrammarList || webkitSpeechGrammarList
       var SpeechRecognitionEvent = SpeechRecognitionEvent || webkitSpeechRecognitionEvent

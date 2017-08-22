@@ -1,7 +1,13 @@
 const express = require('express')
-const http = require('http')
+const fs = require('fs')
+const https = require('https')
 const ECT = require('ect')
 const WebSocket = require('ws')
+
+const options = {
+  key: fs.readFileSync('./keys/key.pem'),
+  cert: fs.readFileSync('./keys/cert.pem')
+}
 
 const LISTEN_PORT = 8080
 const app = express()
@@ -15,11 +21,11 @@ app.set('view engine', 'ect')
 app.engine('ect', ectRenderer.render)
 app.use(express.static('public'))
 
-app.get('/', function (req, res) {
+app.get('/', (req, res) => {
   res.render('index', { LISTEN_PORT })
 })
 
-const server = http.createServer(app)
+const server = https.createServer(options, app)
 const wss = new WebSocket.Server({ server })
 
 wss.on('connection', (ws) => {
