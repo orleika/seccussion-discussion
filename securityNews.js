@@ -19,7 +19,7 @@ client.fetch(targetUrl, (err, $, res) => {
   if (!news) {
     news = striptags($(`dt:contains('${yesterday}')`).parent().html())
   }
-  let topNews = news.trim().replace(/\d{4}\/\d{2}\/\d{2}/g, '').replace(/ - /g, '。').split('\n').slice(0, 3)
+  let topNews = news.trim().replace(/\d{4}\/\d{2}\/\d{2}/g, '').replace(/ - /g, '。').replace(/「/g, '').replace(/」/g, '').split('\n').slice(0, 3)
   console.log(topNews)
 
   const speak = (text) => {
