@@ -3,6 +3,7 @@ const fs = require('fs')
 const https = require('https')
 const ECT = require('ect')
 const WebSocket = require('ws')
+const exec = require('child_process').exec
 
 const options = {
   key: fs.readFileSync('./keys/key.pem'),
@@ -32,6 +33,15 @@ wss.on('connection', (ws) => {
   console.log('connected')
   ws.on('message', (word) => {
     console.log('recognized: %s', word)
+    if (word.includes('ok セキュリティ')) {
+      exec('node securityNews.js', function (error, stdout, stderr) {
+        if (error !== null) {
+          console.log('exec error: ' + error)
+          return
+        }
+        console.log('stdout: ' + stdout)
+      })
+    }
   }).on('close', () => {
     console.log('disconnected...')
   })
