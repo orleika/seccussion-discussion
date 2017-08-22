@@ -23,15 +23,19 @@ client.fetch(targetUrl, (err, $, res) => {
   console.log(topNews)
 
   const speak = (text) => {
-    return function () {
-      return exec(`jtalk ${text}`)
-    }
+    return exec(`jtalk ${text}`)
   }
 
-  let speakingTasks = topNews.map((news) => {
-    return speak(news)
-  })
-  speakingTasks.reduce((prev, curr) => {
-    return prev.then(curr)
-  }, Promise.resolve())
+  const introSentence = '最新のセキュリティに関するニュースをお伝えします。'
+  const speakSentence = introSentence + topNews.join('。')
+  speak(speakSentence)
+    .then((result) => {
+      const stdout = result.stdout
+      const stderr = result.stderr
+      console.log('stdout: ', stdout)
+      console.log('stderr: ', stderr)
+    })
+    .catch((err) => {
+      console.error('exec error: ', err)
+    })
 })
