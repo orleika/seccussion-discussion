@@ -100,9 +100,13 @@ const main = async () => {
     return a.concat(b)
   })
 
-  let articleUrls = await Promise.all(targetUrls.map((target) => {
-    return urls(target)
-  }))
+  // let articleUrls = await Promise.all(targetUrls.map((target) => {
+  //   return urls(target)
+  // }))
+  let articleUrls = [[
+    'http://qiita.com/cof/items/8d0960f335b130a9261e',
+    'http://qiita.com/osada/items/4e5965e6cebc74633de4'
+  ]]
   // unique urls, remove duplicate
   articleUrls = Array.from(new Set(...articleUrls))
 

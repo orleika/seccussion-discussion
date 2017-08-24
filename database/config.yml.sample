@@ -1,1 +1,5 @@
-TARGET_PORTAL=
+default:
+  portals:
+    - https://qiita.com/search?q={KEYWORD}&page={PAGE}
+  keywords:
+    - セキュリティ
