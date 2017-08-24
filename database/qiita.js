@@ -1,5 +1,6 @@
 const fs = require('fs')
 const crypto = require('crypto')
+const path = require('path')
 const { URL } = require('url')
 const yml = require('yml')
 const dotenv = require('dotenv')
@@ -12,7 +13,7 @@ const kuromoji = require('kuromoji')
 const config = yml.load(`${__dirname}/config.yml`)
 const env = dotenv.config().parsed
 
-const tempfile = tempy.file({extension: 'tmp'})
+const tempfile = path.basename(tempy.file({extension: 'tmp'}))
 console.log(tempfile)
 
 const connection = mysql.createConnection({
@@ -75,14 +76,16 @@ const article = async (url) => {
   }
 }
 
-const writeArticles = async (urls) => {
+const articles = async (urls) => {
+  let targetArticles = []
   try {
     for (let url of urls) {
       const targetArticle = await article(url)
-      await appendFile(tempfile, targetArticle, 'utf-8')
+      targetArticles.push(targetArticle)
       // wait next fetch, prevent DOS
       await sleep(3000)
     }
+    return targetArticles
   } catch (e) {
     console.error(e)
   }
@@ -101,10 +104,11 @@ const urls = async (target) => {
           return origin + result.$(element).attr('href')
         }).get()
       // TEMPORARY: limit the fetching page
-      if (partArticleUrls.length === 0 && page === 1) {
+      if (partArticleUrls.length === 0 || page === 2) {
         break
       }
       articleUrls.push(...partArticleUrls)
+      console.log(`articleUrls at ${target}, page: ${page}`)
       page++
       // wait next fetch, prevent DOS
       await sleep(3000)
@@ -184,24 +188,22 @@ const main = async () => {
   // unique urls, remove duplicate
   articleUrls = Array.from(new Set(...articleUrls))
 
-  await writeArticles(articleUrls)
+  const targetArticles = await articles(articleUrls)
+  await writeFile(tempfile, JSON.stringify(targetArticles), 'utf-8')
 
   connection.connect()
-  const articles = await readFile(tempfile, 'utf-8')
-  const normalizedArticles = JSON.parse(articles).map((article) => {
+  const normalizedArticles = targetArticles.map((article) => {
     return normalize(article)
   })
   const sql = 'INSERT INTO ngram ' +
-    '(text_hash, word, position, pos, pos_detail) ' +
-    'VALUES (?, ?, ?, ?, ?)'
+    '(text_hash, word, position, pos) ' +
+    'VALUES (?, ?, ?, ?)'
 
   for (let article of normalizedArticles) {
     let hash = crypto.createHash('sha1').update(article).digest('hex')
     let tokens = await tokenize(article)
     for (let token of tokens) {
-      let params = [
-        hash, token.surface_form, token.word_position, token.pos, token.pos_detail
-      ]
+      let params = [hash, token.surface_form, token.word_position, token.pos]
       try {
         let result = await query(sql, params)
         console.log(result)
