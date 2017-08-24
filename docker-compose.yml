@@ -1,0 +1,15 @@
+version: '3.3'
+services:
+  mysql:
+    image: mysql:5.7
+    env_file:
+      - .env
+    volumes:
+      - $PWD/mysql/conf.d:/etc/mysql/conf.d:ro
+      - $PWD/mysql/initdb.d:/docker-entrypoint-initdb.d:ro
+      - db-storage:/var/lib/mysql
+      - $PWD/mysql/log:/var/log/mysql
+    ports:
+      - '3306:3306'
+volumes:
+  db-storage:
