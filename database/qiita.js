@@ -1,10 +1,35 @@
 const fs = require('fs')
+const crypto = require('crypto')
 const { URL } = require('url')
 const yml = require('yml')
+const dotenv = require('dotenv')
+const mysql = require('mysql')
+const tempy = require('tempy')
 const client = require('cheerio-httpcli')
 const striptags = require('striptags')
+const kuromoji = require('kuromoji')
 
-const config = yml.load('config.yml')
+const config = yml.load(`${__dirname}/config.yml`)
+const env = dotenv.config().parsed
+
+const tempfile = tempy.file({extension: 'tmp'})
+console.log(tempfile)
+
+const connection = mysql.createConnection({
+  host: env.MYSQL_HOST,
+  user: env.MYSQL_USER,
+  password: env.MYSQL_PASSWORD,
+  database: env.MYSQL_DATABASE
+})
+
+const query = (...args) => {
+  return new Promise((resolve, reject) => {
+    connection.query(...args, (err, results, fields) => {
+      if (err) reject(err)
+      resolve({results, fields})
+    })
+  })
+}
 
 const sleep = (time) => {
   return new Promise((resolve, reject) => {
@@ -32,6 +57,15 @@ const writeFile = (...args) => {
   })
 }
 
+const appendFile = (...args) => {
+  return new Promise((resolve, reject) => {
+    fs.appendFile(...args, (err) => {
+      if (err) reject(err)
+      resolve()
+    })
+  })
+}
+
 const article = async (url) => {
   try {
     const result = await client.fetch(url)
@@ -41,20 +75,14 @@ const article = async (url) => {
   }
 }
 
-const articles = async (urls) => {
+const writeArticles = async (urls) => {
   try {
-    let targetArticles = []
-
     for (let url of urls) {
       const targetArticle = await article(url)
-      console.log(targetArticle)
-      targetArticles.push(targetArticle)
-
+      await appendFile(tempfile, targetArticle, 'utf-8')
       // wait next fetch, prevent DOS
       await sleep(3000)
     }
-
-    return targetArticles
   } catch (e) {
     console.error(e)
   }
@@ -72,15 +100,12 @@ const urls = async (target) => {
         .map((index, element) => {
           return origin + result.$(element).attr('href')
         }).get()
-
-      if (partArticleUrls.length === 0) {
+      // TEMPORARY: limit the fetching page
+      if (partArticleUrls.length === 0 && page === 1) {
         break
       }
-
       articleUrls.push(...partArticleUrls)
-
       page++
-
       // wait next fetch, prevent DOS
       await sleep(3000)
     }
@@ -89,6 +114,59 @@ const urls = async (target) => {
   } catch (e) {
     console.error(e)
   }
+}
+
+const normalize = (article) => {
+  // trim HTML tag
+  let normalized = striptags(article)
+  // trim code
+  normalized = normalized.replace(/```[\s\S]*?```/gm, '')
+  // trim number list
+  normalized = normalized.replace(/\d+\. /g, '')
+  // trim em and strong
+  normalized = normalized
+    .replace(/__?(\S+)__?/g, '$1').replace(/\*\*?(\S*?)\*\*?/g, '$1')
+  // trim header text and header tag on markdown
+  normalized = normalized
+    .replace(/\S+#+\S+\n/g, '').replace(/[\s]*?\n---/gm, '\n')
+  // trim URL
+  normalized = normalized
+    .replace(/http(s)?:\/\/([\w-]+\.)+[\w-]+(\/[\w- ./?%&=]*)?/g, '')
+  // trim blank line
+  normalized = normalized.replace(/^\n/gm, '')
+
+  return normalized
+}
+
+const extractURL = (article) => {
+  // extract markdown style URLs
+  const mUrlRegExp =
+    /\[\S*?]\((http(s)?:\/\/([\w-]+\.)+[\w-]+(\/[\w- ./?%&=]*)?\))/g
+  let mUrls = article.match(mUrlRegExp)
+  if (!mUrls) {
+    mUrls = []
+  }
+  // extract simple URLs
+  let urls = article.replace(mUrlRegExp)
+    .match(/(http(s)?:\/\/([\w-]+\.)+[\w-]+(\/[\w- ./?%&=]*)?)/g)
+  if (!urls) {
+    urls = []
+  }
+
+  return urls.concat(mUrls)
+}
+
+const builder = kuromoji.builder({
+  dicPath: 'node_modules/kuromoji/dict/'
+})
+
+const tokenize = (text) => {
+  return new Promise((resolve, reject) => {
+    builder.build((err, tokenizer) => {
+      if (err) reject(err)
+      resolve(tokenizer.tokenize(text))
+    })
+  })
 }
 
 const main = async () => {
@@ -100,18 +178,38 @@ const main = async () => {
     return a.concat(b)
   })
 
-  // let articleUrls = await Promise.all(targetUrls.map((target) => {
-  //   return urls(target)
-  // }))
-  let articleUrls = [[
-    'http://qiita.com/cof/items/8d0960f335b130a9261e',
-    'http://qiita.com/osada/items/4e5965e6cebc74633de4'
-  ]]
+  let articleUrls = await Promise.all(targetUrls.map((target) => {
+    return urls(target)
+  }))
   // unique urls, remove duplicate
   articleUrls = Array.from(new Set(...articleUrls))
 
-  const targetArticles = await articles(articleUrls)
-  console.log(targetArticles)
-}
+  await writeArticles(articleUrls)
 
+  connection.connect()
+  const articles = await readFile(tempfile, 'utf-8')
+  const normalizedArticles = JSON.parse(articles).map((article) => {
+    return normalize(article)
+  })
+  const sql = 'INSERT INTO ngram ' +
+    '(text_hash, word, position, pos, pos_detail) ' +
+    'VALUES (?, ?, ?, ?, ?)'
+
+  for (let article of normalizedArticles) {
+    let hash = crypto.createHash('sha1').update(article).digest('hex')
+    let tokens = await tokenize(article)
+    for (let token of tokens) {
+      let params = [
+        hash, token.surface_form, token.word_position, token.pos, token.pos_detail
+      ]
+      try {
+        let result = await query(sql, params)
+        console.log(result)
+      } catch (e) {
+        console.error(e)
+      }
+    }
+  }
+  connection.end()
+}
 main()
