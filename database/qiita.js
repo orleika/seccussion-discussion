@@ -1,20 +1,15 @@
 const fs = require('fs')
 const crypto = require('crypto')
-const path = require('path')
 const { URL } = require('url')
 const yml = require('yml')
 const dotenv = require('dotenv')
 const mysql = require('mysql')
-const tempy = require('tempy')
 const client = require('cheerio-httpcli')
 const striptags = require('striptags')
 const kuromoji = require('kuromoji')
 
 const config = yml.load(`${__dirname}/config.yml`)
 const env = dotenv.config().parsed
-
-const tempfile = path.basename(tempy.file({extension: 'tmp'}))
-console.log(tempfile)
 
 const connection = mysql.createConnection({
   host: env.MYSQL_HOST,
@@ -69,6 +64,7 @@ const appendFile = (...args) => {
 
 const article = async (url) => {
   try {
+    console.log(url)
     const result = await client.fetch(url)
     return result.$('[name = "raw_body"]').html()
   } catch (e) {
@@ -104,7 +100,7 @@ const urls = async (target) => {
           return origin + result.$(element).attr('href')
         }).get()
       // TEMPORARY: limit the fetching page
-      if (partArticleUrls.length === 0 || page === 2) {
+      if (partArticleUrls.length === 0) {
         break
       }
       articleUrls.push(...partArticleUrls)
@@ -124,20 +120,41 @@ const normalize = (article) => {
   // trim HTML tag
   let normalized = striptags(article)
   // trim code
-  normalized = normalized.replace(/```[\s\S]*?```/gm, '')
+  normalized = normalized
+    .replace(/```[\s\S]*?```/gm, '')
+    .replace(/`[\s\S]*?`/g, '')
+  // trim checkbox list
+    .replace(/^\s*-\s*\[.*?]\s*/gm, '')
   // trim number list
-  normalized = normalized.replace(/\d+\. /g, '')
-  // trim em and strong
-  normalized = normalized
-    .replace(/__?(\S+)__?/g, '$1').replace(/\*\*?(\S*?)\*\*?/g, '$1')
+    .replace(/^\s*\d+\./gm, '')
+  // trim disc list
+    .replace(/^\s*[*+-]+/gm, '')
+  // trim blockquotes
+    .replace(/^\s*>\s*/gm, '')
+  // trim hr
+    .replace(/^[\s*-]+$/gm, '')
+  // trim table
+    .replace(/\|\s*/g, '')
+    .replace(/:-/g, '')
+    .replace(/-+:/g, '')
   // trim header text and header tag on markdown
-  normalized = normalized
-    .replace(/\S+#+\S+\n/g, '').replace(/[\s]*?\n---/gm, '\n')
+    .replace(/^\s*#+.+$/gm, '')
+    .replace(/\S*?\n---/gm, '\n')
+  // trim image
+    .replace(/^\s*!\[\S+]\(http(s)?:\/\/([\w-]+\.)+[\w-]+(\/[\w- ./?%&=]*)?\s*.*?\)\s*$/gm, '')
   // trim URL
-  normalized = normalized
     .replace(/http(s)?:\/\/([\w-]+\.)+[\w-]+(\/[\w- ./?%&=]*)?/g, '')
+  // trim strike
+    .replace(/~\S*?~/g, '')
+  // trim em
+    .replace(/__?(\S+)__?/g, '$1')
+  // trim strong
+    .replace(/\*\*?(\S*?)\*\*?/g, '$1')
   // trim blank line
-  normalized = normalized.replace(/^\n/gm, '')
+    .replace(/^\n/gm, '')
+  // trim header space and tail space
+    .replace(/^\s*/gm, '')
+    .replace(/\s*$/gm, '')
 
   return normalized
 }
@@ -185,33 +202,48 @@ const main = async () => {
   let articleUrls = await Promise.all(targetUrls.map((target) => {
     return urls(target)
   }))
-  // unique urls, remove duplicate
+  // remove duplicate URLs
   articleUrls = Array.from(new Set(...articleUrls))
 
-  const targetArticles = await articles(articleUrls)
-  await writeFile(tempfile, JSON.stringify(targetArticles), 'utf-8')
-
+  // fetch articles, then insert into mysql
   connection.connect()
-  const normalizedArticles = targetArticles.map((article) => {
-    return normalize(article)
-  })
   const sql = 'INSERT INTO ngram ' +
     '(text_hash, word, position, pos) ' +
     'VALUES (?, ?, ?, ?)'
+  try {
+    for (let articleUrl of articleUrls) {
+      const targetArticle = await article(articleUrl)
+      const normalizedArticle = normalize(targetArticle)
+      const hash = crypto.createHash('sha1')
+        .update(normalizedArticle).digest('hex')
+      const tokens = await tokenize(normalizedArticle)
 
-  for (let article of normalizedArticles) {
-    let hash = crypto.createHash('sha1').update(article).digest('hex')
-    let tokens = await tokenize(article)
-    for (let token of tokens) {
-      let params = [hash, token.surface_form, token.word_position, token.pos]
-      try {
-        let result = await query(sql, params)
-        console.log(result)
-      } catch (e) {
-        console.error(e)
+      for (let token of tokens) {
+        // skip blank words
+        if (token.surface_form.match(/^\s+$/gm)) {
+          continue
+        }
+        // skip symbols
+        if (token.pos === '記号') {
+          continue
+        }
+        const params = [
+          hash, token.surface_form, token.word_position, token.pos
+        ]
+        try {
+          const result = await query(sql, params)
+          console.log(result)
+        } catch (e) {
+          console.error(e)
+        }
       }
+      // wait next fetch, prevent DOS
+      await sleep(3000)
     }
+  } catch (e) {
+    console.error(e)
   }
+
   connection.end()
 }
 main()
