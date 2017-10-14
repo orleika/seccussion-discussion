@@ -2,6 +2,8 @@
 
 > secussion = security + discussion 
 
+[discussion-generator](https://github.com/orleika/discussion-generator) is partial project.
+
 **! DEPRECATED THIS PROJECT**
 **Please visit me in my [new repository](https://github.com/orleika/fjord)!**
 
