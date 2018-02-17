@@ -1,0 +1,14 @@
+{
+  "name": "secussion_webapp",
+  "version": "0.1.0",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "child-process-promise": "^2.2.1",
+    "express": "^4.16.2",
+    "ws": "^4.0.0"
+  }
+}
