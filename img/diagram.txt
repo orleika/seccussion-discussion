@@ -1,0 +1,20 @@
+%% Powered by mermaid 7.1.0 https://mermaidjs.github.io/mermaid-live-editor/
+sequenceDiagram
+    participant User
+    participant Client
+    participant Secussion
+
+    Note right of Client: Client is a interface as the webapp, smartspeaker or smartphone app.
+    loop end of a discussion
+    activate User
+    activate Client
+    User->>Client: Talk (or Type) about the information security
+    Client->>Secussion: Send the user talking sentences
+    activate Secussion
+    Secussion-->>Client: Respond the answer
+    deactivate Secussion
+    Note left of Secussion: Answer is not simply response, but opinions to lead the user to a discussion
+    Client->>User: Say (or Show) about the answer
+    deactivate User
+    deactivate Client
+    end
